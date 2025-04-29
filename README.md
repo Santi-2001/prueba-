@@ -26,6 +26,7 @@ sudo apt update
 sudo apt install mssql-tools unixodbc-dev
 echo 'export PATH="$PATH:/opt/mssql-tools/bin"' >> ~/.bashrc
 source ~/.bashrc
+pip install pandas openpyxl
 ```
 
 ### Usar sqlcmd para conectarse desde la terminal

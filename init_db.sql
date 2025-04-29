@@ -75,10 +75,10 @@ CREATE TABLE Pregunta (
 );
 
 CREATE TABLE Grupo (
-  CRN INT NOT NULL,
+  CRN INT NOT NULL, 
   idPeriodo INT NOT NULL,
   clave INT NOT NULL,
-  grupo VARCHAR(10) NULL, -- nuevo campo grupo como 1A, 2B, etc.
+  grupo VARCHAR(10) NULL,
   PRIMARY KEY (CRN),
   FOREIGN KEY (idPeriodo) REFERENCES PeriodoEscolar(idPeriodo),
   FOREIGN KEY (clave) REFERENCES Materia(clave)

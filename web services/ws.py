@@ -1,5 +1,6 @@
 from flask import Flask, request, jsonify, session
 from flask_cors import CORS
+import pandas as pd
 import pymssql
 import hashlib
 
@@ -371,6 +372,31 @@ def get_grupo():
         return jsonify({'error': 'No se pudo conectar a la base de datos'}), 500
     
 
+from flask import Flask, request, jsonify, session
+from flask_cors import CORS
+import pandas as pd
+import pymssql
+import hashlib
+
+app = Flask(__name__)
+CORS(app)
+
+app.secret_key = 'Equipo1'
+
+SERVER = 'localhost'
+DATABASE = 'Data'
+USERNAME = 'sa'
+PASSWORD = 'YourPassword123!'
+
+def get_db_connection():
+    try:
+        conn = pymssql.connect(
+            server=SERVER, port=1433, database=DATABASE, user=USERNAME, password=PASSWORD)
+        return conn
+    except Exception as e:
+        print(f"Error conectando a BD: {e}")
+        return None
+
 @app.route('/subir_encuesta', methods=['POST'])
 def subir_encuesta():
     if 'file' not in request.files:
@@ -382,97 +408,121 @@ def subir_encuesta():
         return jsonify({'error': 'No se seleccionó un archivo'}), 400
 
     if file and file.filename.endswith('.xlsx'):
+        # Leer el archivo Excel
         df = pd.read_excel(file, engine='openpyxl')
         data_json = df.to_dict(orient='records')
 
-        conexion = obtener_conexion()
+        # Conectar a la base de datos
+        conexion = get_db_connection()
         if conexion is None:
             return jsonify({'error': 'No se pudo conectar a la base de datos'}), 500
         
         cursor = conexion.cursor()
 
-        for row in data_json:
-            matricula = str(row['Matricula']).strip()
-            grupo_nombre = str(row['Grupo']).strip()
-            comentario = row['Comentarios']
-            profesor_nombre = row['Profesor']
-            clase_nombre = row['Clase']
-            respuestas = {k: v for k, v in row.items() if k not in ['Matricula', 'Grupo', 'Comentarios', 'Profesor', 'Clase']}
+        try:
+            for row in data_json:
+                matricula = str(row['Matricula']).strip()
+                grupo_nombre = str(row['Grupo']).strip()
+                comentario = row['Comentarios']
+                profesor_nombre = row['Profesor']
+                clase_nombre = row['Clase']
+                respuestas = {k: v for k, v in row.items() if k not in ['Matricula', 'Grupo', 'Comentarios', 'Profesor', 'Clase']}
 
-            cursor.execute("SELECT matricula FROM Alumno WHERE matricula = %s", (matricula,))
-            if not cursor.fetchone():
-                cursor.execute("INSERT INTO Alumno (matricula, nombre, apellidoPaterno, apellidoMaterno) VALUES (%s, %s, %s, %s)", (matricula, 'Pendiente', 'Pendiente', 'Pendiente'))
+                # 1. Insertar o verificar Alumno
+                cursor.execute("SELECT matricula FROM Alumno WHERE matricula = %s", (matricula,))
+                if not cursor.fetchone():
+                    cursor.execute("INSERT INTO Alumno (matricula, nombre, apellidoPaterno, apellidoMaterno) VALUES (%s, %s, %s, %s)", (matricula, 'Pendiente', 'Pendiente', 'Pendiente'))
 
-            cursor.execute("SELECT clave FROM Materia WHERE nombre = %s", (clase_nombre,))
-            materia = cursor.fetchone()
-            if materia:
-                clave_materia = materia[0]
-            else:
-                cursor.execute("INSERT INTO Materia (clave, nombre, idDepartamento) VALUES ((SELECT ISNULL(MAX(clave),100) + 1 FROM Materia), %s, 1)", (clase_nombre,))
-                conexion.commit()
+                # 2. Verificar o crear Materia
                 cursor.execute("SELECT clave FROM Materia WHERE nombre = %s", (clase_nombre,))
-                clave_materia = cursor.fetchone()[0]
+                materia = cursor.fetchone()
+                if materia:
+                    clave_materia = materia[0]
+                else:
+                    # Crear materia nueva en el Departamento 1
+                    cursor.execute("INSERT INTO Materia (clave, nombre, idDepartamento) VALUES ((SELECT ISNULL(MAX(clave),100) + 1 FROM Materia), %s, 1)", (clase_nombre,))
+                    conexion.commit()
+                    cursor.execute("SELECT clave FROM Materia WHERE nombre = %s", (clase_nombre,))
+                    clave_materia = cursor.fetchone()[0]
 
-            cursor.execute("SELECT CRN FROM Grupo WHERE grupo = %s AND clave = %s", (grupo_nombre, clave_materia))
-            grupo = cursor.fetchone()
-            if grupo:
-                crn = grupo[0]
-            else:
-                cursor.execute("INSERT INTO Grupo (idPeriodo, clave, grupo) VALUES (1, %s, %s)", (clave_materia, grupo_nombre))
-                conexion.commit()
+                # 3. Verificar o crear Grupo
                 cursor.execute("SELECT CRN FROM Grupo WHERE grupo = %s AND clave = %s", (grupo_nombre, clave_materia))
-                crn = cursor.fetchone()[0]
+                grupo = cursor.fetchone()
+                
+                if grupo:
+                    crn = grupo[0]
+                    print(f"Grupo encontrado. CRN existente: {crn}")  # Debugging line
+                else:
+                    # Crear nuevo Grupo si no existe
+                    cursor.execute("INSERT INTO Grupo (idPeriodo, clave, grupo) VALUES (1, %s, %s)", (clave_materia, grupo_nombre))
+                    conexion.commit()
+                    print(f"Inserción de nuevo grupo con nombre: {grupo_nombre} y clave: {clave_materia}")  # Debugging line
+                    cursor.execute("SELECT CRN FROM Grupo WHERE grupo = %s AND clave = %s", (grupo_nombre, clave_materia))
+                    crn = cursor.fetchone()[0]
+                    print(f"Nuevo CRN asignado: {crn}")  # Debugging line
 
-            apellido_paterno, nombre_profesor = profesor_nombre.split(",")
-            apellido_paterno = apellido_paterno.strip()
-            nombre_profesor = nombre_profesor.strip()
+                # Verificación de si el CRN es NULL
+                if crn is None:
+                    print("Error: El CRN es NULL, no se pudo asignar un valor válido")
+                    return jsonify({'error': 'El CRN es NULL, no se pudo asignar un valor válido'}), 500
 
-            cursor.execute("SELECT matricula FROM Profesor WHERE nombre = %s AND apellidoPaterno = %s", (nombre_profesor, apellido_paterno))
-            profesor = cursor.fetchone()
-            if profesor:
-                matricula_profesor = profesor[0]
-            else:
-                nueva_matricula_profesor = f"P{clave_materia}{grupo_nombre}"
-                cursor.execute("INSERT INTO Profesor (matricula, nombre, apellidoPaterno, apellidoMaterno, rol, idDepartamento) VALUES (%s, %s, %s, %s, %s, %s)",
-                               (nueva_matricula_profesor, nombre_profesor, apellido_paterno, 'Pendiente', 'Profesor', 1))
-                conexion.commit()
-                matricula_profesor = nueva_matricula_profesor
+                # 4. Verificar o crear Profesor
+                apellido_paterno, nombre_profesor = profesor_nombre.split(",")
+                apellido_paterno = apellido_paterno.strip()
+                nombre_profesor = nombre_profesor.strip()
 
-            cursor.execute("SELECT * FROM ProfesorGrupo WHERE CRN = %s AND matricula = %s", (crn, matricula_profesor))
-            if not cursor.fetchone():
-                cursor.execute("INSERT INTO ProfesorGrupo (CRN, matricula) VALUES (%s, %s)", (crn, matricula_profesor))
+                cursor.execute("SELECT matricula FROM Profesor WHERE nombre = %s AND apellidoPaterno = %s", (nombre_profesor, apellido_paterno))
+                profesor = cursor.fetchone()
+                if profesor:
+                    matricula_profesor = profesor[0]
+                else:
+                    nueva_matricula_profesor = f"P{clave_materia}{grupo_nombre}"
+                    cursor.execute("INSERT INTO Profesor (matricula, nombre, apellidoPaterno, apellidoMaterno, rol, idDepartamento) VALUES (%s, %s, %s, %s, %s, %s)",
+                                   (nueva_matricula_profesor, nombre_profesor, apellido_paterno, 'Pendiente', 'Profesor', 1))
+                    conexion.commit()
+                    matricula_profesor = nueva_matricula_profesor
 
-            if comentario and not pd.isna(comentario):
-                cursor.execute("""
-                    IF NOT EXISTS (SELECT * FROM Comenta WHERE idPregunta = 1 AND matricula = %s AND CRN = %s)
-                    BEGIN
-                        INSERT INTO Comenta (idPregunta, matricula, CRN, comentario)
-                        VALUES (1, %s, %s, %s)
-                    END
-                """, (matricula, crn, matricula, crn, comentario))
+                # 5. Relacionar Profesor con Grupo
+                cursor.execute("SELECT * FROM ProfesorGrupo WHERE CRN = %s AND matricula = %s", (crn, matricula_profesor))
+                if not cursor.fetchone():
+                    cursor.execute("INSERT INTO ProfesorGrupo (CRN, matricula) VALUES (%s, %s)", (crn, matricula_profesor))
 
-            for idx, (pregunta, valor) in enumerate(respuestas.items(), start=1):
-                if not pd.isna(valor):
+                # 6. Insertar Comentario
+                if comentario and not pd.isna(comentario):
                     cursor.execute("""
-                        IF NOT EXISTS (SELECT * FROM Responde WHERE matricula = %s AND idPregunta = %s AND CRN = %s)
+                        IF NOT EXISTS (SELECT * FROM Comenta WHERE idPregunta = 1 AND matricula = %s AND CRN = %s)
                         BEGIN
-                            INSERT INTO Responde (matricula, idPregunta, CRN, respuesta)
-                            VALUES (%s, %s, %s, %s)
+                            INSERT INTO Comenta (idPregunta, matricula, CRN, comentario)
+                            VALUES (1, %s, %s, %s)
                         END
-                    """, (matricula, idx, crn, matricula, idx, crn, str(valor)))
+                    """, (matricula, crn, matricula, crn, comentario))
 
-        conexion.commit()
-        cursor.close()
-        conexion.close()
+                # 7. Insertar Respuestas
+                for idx, (pregunta, valor) in enumerate(respuestas.items(), start=1):
+                    if not pd.isna(valor):
+                        cursor.execute("""
+                            IF NOT EXISTS (SELECT * FROM Responde WHERE matricula = %s AND idPregunta = %s AND CRN = %s)
+                            BEGIN
+                                INSERT INTO Responde (matricula, idPregunta, CRN, respuesta)
+                                VALUES (%s, %s, %s, %s)
+                            END
+                        """, (matricula, idx, crn, matricula, idx, crn, str(valor)))
 
-        return jsonify({'mensaje': 'Archivo procesado con éxito y registros creados si no existían'}), 200
+            conexion.commit()
+
+            return jsonify({'mensaje': 'Archivo procesado con éxito y registros creados si no existían'}), 200
+
+        except Exception as e:
+            conexion.rollback()
+            return jsonify({'error': f'Ocurrió un error al procesar el archivo: {str(e)}'}), 500
+
+        finally:
+            cursor.close()
+            conexion.close()
 
     return jsonify({'error': 'Formato de archivo no soportado. Por favor sube un archivo .xlsx'}), 400
 
-if __name__ == '__main__':
-    app.run(debug=True)
 
-    
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
 
