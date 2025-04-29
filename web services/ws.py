@@ -107,24 +107,28 @@ def obtener_usuario():
         return jsonify({'error': 'No se pudo conectar a la base de datos'}), 500
     
 @app.route('/profesores', methods=['GET'])
-def get_profesores():
+def get_nombres_profesores():
     conn = get_db_connection()
     if conn:
         try:
             cursor = conn.cursor(as_dict=True)
             cursor.execute("""
-                SELECT p.matricula, p.nombre, p.apellidoPaterno, p.apellidoMaterno, p.rol, d.nombreDepartamento
-                FROM Profesor p
-                JOIN Departamento d ON p.idDepartamento = d.idDepartamento
+                SELECT nombre, apellidoPaterno, apellidoMaterno
+                FROM Profesor
             """)
             profesores = cursor.fetchall()
-            return jsonify(profesores), 200
+
+            # Construir lista de nombres completos
+            nombres = [f"{p['nombre']} {p['apellidoPaterno']} {p['apellidoMaterno']}" for p in profesores]
+
+            return jsonify(nombres), 200
         except Exception as e:
             return jsonify({'error': f'Error al obtener profesores: {e}'}), 500
         finally:
             conn.close()
     else:
         return jsonify({'error': 'No se pudo conectar a la base de datos'}), 500
+
 
 
 @app.route('/profesor/<int:profesor_id>', methods=['GET'])
@@ -180,22 +184,6 @@ def create_profesor():
         except Exception as e:
             conn.rollback()
             return jsonify({'error': f'Error al crear profesor: {e}'}), 500
-        finally:
-            conn.close()
-    else:
-        return jsonify({'error': 'No se pudo conectar a la base de datos'}), 500
-
-@app.route('/departamentos', methods=['GET'])
-def get_departamentos():
-    conn = get_db_connection()
-    if conn:
-        try:
-            cursor = conn.cursor(as_dict=True)
-            cursor.execute("SELECT * FROM Departamento")
-            departamentos = cursor.fetchall()
-            return jsonify(departamentos), 200
-        except Exception as e:
-            return jsonify({'error': f'Error al obtener departamentos: {e}'}), 500
         finally:
             conn.close()
     else:
@@ -345,6 +333,23 @@ def get_periodos():
             return jsonify(periodos), 200
         except Exception as e:
             return jsonify({'error': f'Error al obtener periodos: {e}'}), 500
+        finally:
+            conn.close()
+    else:
+        return jsonify({'error': 'No se pudo conectar a la base de datos'}), 500
+    
+@app.route('/grupos', methods=['GET'])
+def get_grupo():
+    conn = get_db_connection()
+    if conn:
+        try:
+            cursor = conn.cursor(as_dict=True)
+            cursor.execute("SELECT CRN FROM Grupo")
+            grupo = cursor.fetchall()
+            cr = [g['CRN'] for g in grupo]
+            return jsonify(cr), 200
+        except Exception as e:
+            return jsonify({'error': f'Error al obtener grupo: {e}'}), 500
         finally:
             conn.close()
     else:
