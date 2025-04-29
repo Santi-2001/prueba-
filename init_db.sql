@@ -1,3 +1,4 @@
+-- Crear base de datos si no existe
 IF NOT EXISTS (SELECT name FROM sys.databases WHERE name = 'Data')
 BEGIN
     CREATE DATABASE Data;
@@ -14,27 +15,24 @@ DROP TABLE IF EXISTS Comenta;
 DROP TABLE IF EXISTS ProfesorGrupo;
 DROP TABLE IF EXISTS GrupoMateria;
 DROP TABLE IF EXISTS GrupoClasifClase;
-DROP TABLE IF EXISTS Usuario;            
+DROP TABLE IF EXISTS Usuario;
 DROP TABLE IF EXISTS Grupo;
 DROP TABLE IF EXISTS Permisos;
 DROP TABLE IF EXISTS Materia;
-DROP TABLE IF EXISTS Profesor;         
+DROP TABLE IF EXISTS Profesor;
 DROP TABLE IF EXISTS Departamento;
 DROP TABLE IF EXISTS PeriodoEscolar;
 DROP TABLE IF EXISTS Pregunta;
 DROP TABLE IF EXISTS Alumno;
 GO
 
-
--- Crear las tablas en el orden adecuado
+-- Crear tablas
 
 CREATE TABLE Departamento (
   idDepartamento INT NOT NULL IDENTITY(1,1),
-  nombreDepartamento VARCHAR(20) NOT NULL,
+  nombreDepartamento VARCHAR(50) NOT NULL,
   PRIMARY KEY (idDepartamento)
 );
-
-ALTER TABLE Departamento ALTER COLUMN nombreDepartamento VARCHAR(50);
 
 CREATE TABLE PeriodoEscolar (
   idPeriodo INT NOT NULL IDENTITY(1,1),
@@ -51,7 +49,7 @@ CREATE TABLE Materia (
 );
 
 CREATE TABLE Profesor (
-  matricula INT NOT NULL,  
+  matricula VARCHAR(10) NOT NULL,  
   nombre VARCHAR(20) NOT NULL,
   apellidoPaterno VARCHAR(30) NOT NULL,
   apellidoMaterno VARCHAR(30) NOT NULL,
@@ -80,6 +78,7 @@ CREATE TABLE Grupo (
   CRN INT NOT NULL,
   idPeriodo INT NOT NULL,
   clave INT NOT NULL,
+  grupo VARCHAR(10) NULL, -- nuevo campo grupo como 1A, 2B, etc.
   PRIMARY KEY (CRN),
   FOREIGN KEY (idPeriodo) REFERENCES PeriodoEscolar(idPeriodo),
   FOREIGN KEY (clave) REFERENCES Materia(clave)
@@ -109,7 +108,7 @@ CREATE TABLE Comenta (
 
 CREATE TABLE ProfesorGrupo (
   CRN INT NOT NULL,
-  matricula INT NOT NULL,
+  matricula VARCHAR(10) NOT NULL,
   PRIMARY KEY (CRN, matricula),
   FOREIGN KEY (CRN) REFERENCES Grupo(CRN),
   FOREIGN KEY (matricula) REFERENCES Profesor(matricula)
@@ -129,85 +128,72 @@ CREATE TABLE GrupoClasifClase (
 );
 
 CREATE TABLE Usuario (
-  matricula INT NOT NULL PRIMARY KEY, 
+  matricula VARCHAR(10) NOT NULL PRIMARY KEY,
   passwordHash VARBINARY(64) NOT NULL,
   FOREIGN KEY (matricula) REFERENCES Profesor(matricula)
 );
+GO
 
---
--- ---
--- --- Test Data ---
+-- Insertar datos de prueba
 
--- Insertar Departamentos
 INSERT INTO Departamento (nombreDepartamento) VALUES
 ('Ciencias Comp.'),
 ('Matemáticas'),
 ('Física');
 
--- Insertar Materias
 INSERT INTO Materia (clave, nombre, idDepartamento) VALUES
 (101, 'Álgebra', 2),
 (202, 'Estructuras de Datos', 1),
 (303, 'Mecánica', 3);
 
--- Insertar Profesores (asegurando que los departamentos existen)
 INSERT INTO Profesor (matricula, nombre, apellidoPaterno, apellidoMaterno, rol, idDepartamento) VALUES
-(1, 'Carlos', 'López', 'Martínez', 'Administrador', 1),
-(2, 'Ana', 'González', 'Ruiz', 'Coordinador', 2),
-(3, 'Luis', 'Fernández', 'Soto', 'Director', 3);
+('A01', 'Carlos', 'López', 'Martínez', 'Administrador', 1),
+('A02', 'Ana', 'González', 'Ruiz', 'Coordinador', 2),
+('A03', 'Luis', 'Fernández', 'Soto', 'Director', 3);
 
--- Insertar Periodos Escolares
 INSERT INTO PeriodoEscolar (fecha) VALUES
 ('2024-01-01'),
 ('2024-08-01');
 
--- Insertar Grupos (asegurando que los CRN y claves existen)
-INSERT INTO Grupo (CRN, idPeriodo, clave) VALUES
-(1001,  1, 101),
-(1002,  1, 202),
-(1003,  2, 303);
+INSERT INTO Grupo (CRN, idPeriodo, clave, grupo) VALUES
+(1001, 1, 101, '1A'),
+(1002, 1, 202, '2A'),
+(1003, 2, 303, '1B');
 
--- Insertar Alumnos
 INSERT INTO Alumno (matricula, nombre, apellidoPaterno, apellidoMaterno, matricula_Responde) VALUES
 ('A001', 'Juan', 'Pérez', 'Sánchez', NULL),
 ('A002', 'María', 'Ramírez', 'López', NULL),
 ('A003', 'Pedro', 'Díaz', 'Torres', NULL);
 
--- Insertar Preguntas
 INSERT INTO Pregunta (pregunta) VALUES
 ('¿Te gusta la materia?'),
 ('¿Cómo calificarías al profesor?');
 
--- Insertar ProfesorGrupo
 INSERT INTO ProfesorGrupo (CRN, matricula) VALUES
-(1001, 1),
-(1002, 2),
-(1003, 3);
+(1001, 'A01'),
+(1002, 'A02'),
+(1003, 'A03');
 
--- Insertar Respuestas
 INSERT INTO Responde (matricula, idPregunta, CRN, respuesta) VALUES
 ('A001', 1, 1001, 'Sí'),
 ('A002', 2, 1002, 'Regular');
 
--- Insertar Comentarios
 INSERT INTO Comenta (idPregunta, matricula, CRN, comentario) VALUES
 (1, 'A001', 1001, 'Me gusta la materia'),
 (2, 'A002', 1002, 'El profesor explica bien');
 
--- Insertar Permisos
 INSERT INTO Permisos (rol) VALUES
 ('Administrador'),
 ('Director'),
 ('Coordinador'),
 ('Profesor');
 
--- Insertar GrupoClasifClase
 INSERT INTO GrupoClasifClase (CRN, clasifClase) VALUES
 (1001, 'Teoría'),
 (1002, 'Laboratorio'),
 (1003, 'Teoría');
 
 INSERT INTO Usuario (matricula, passwordHash) VALUES
-(1, HASHBYTES('SHA2_256', CONVERT(VARCHAR, 'Renata'))),
-(2, HASHBYTES('SHA2_256', CONVERT(VARCHAR, 'Renlo'))),
-(3, HASHBYTES('SHA2_256', CONVERT(VARCHAR, 'Dania')));
+('A01', HASHBYTES('SHA2_256', CONVERT(VARCHAR, 'Renata'))),
+('A02', HASHBYTES('SHA2_256', CONVERT(VARCHAR, 'Renlo'))),
+('A03', HASHBYTES('SHA2_256', CONVERT(VARCHAR, 'Dania')));

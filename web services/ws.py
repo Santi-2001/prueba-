@@ -166,19 +166,33 @@ def create_profesor():
     apellidoPaterno = data.get('apellidoPaterno')
     apellidoMaterno = data.get('apellidoMaterno')
     rol = data.get('rol')
-    idDepartamento = data.get('idDepartamento')
+    nombreDepartamento = data.get('departamento')  # <<<< AHORA RECIBIMOS EL NOMBRE
 
-    if not matricula or not nombre or not apellidoPaterno or not apellidoMaterno or not rol or not idDepartamento:
+    if not matricula or not nombre or not apellidoPaterno or not apellidoMaterno or not rol or not nombreDepartamento:
         return jsonify({'error': 'Todos los campos son obligatorios'}), 400
 
     conn = get_db_connection()
     if conn:
         try:
             cursor = conn.cursor()
+
+            # Buscar idDepartamento basado en el nombre
+            cursor.execute("""
+                SELECT idDepartamento FROM Departamento WHERE nombreDepartamento = %s
+            """, (nombreDepartamento,))
+            result = cursor.fetchone()
+
+            if not result:
+                return jsonify({'error': f'El departamento "{nombreDepartamento}" no existe'}), 400
+
+            idDepartamento = result[0]
+
+            # Insertar el profesor
             cursor.execute("""
                 INSERT INTO Profesor (matricula, nombre, apellidoPaterno, apellidoMaterno, rol, idDepartamento)
                 VALUES (%s, %s, %s, %s, %s, %s)
             """, (matricula, nombre, apellidoPaterno, apellidoMaterno, rol, idDepartamento))
+
             conn.commit()
             return jsonify({'mensaje': 'Profesor creado exitosamente'}), 201
         except Exception as e:
@@ -188,6 +202,7 @@ def create_profesor():
             conn.close()
     else:
         return jsonify({'error': 'No se pudo conectar a la base de datos'}), 500
+
     
 @app.route('/Departamento/nombres', methods=['GET'])
 def get_nombres_grupos():
@@ -195,7 +210,7 @@ def get_nombres_grupos():
     if conn:
         try:
             cursor = conn.cursor(as_dict=True)
-            cursor.execute("SELECT nombreDepartamento FROM Departamento")  # seleccionamos solo la columna grupo
+            cursor.execute("SELECT nombreDepartamento FROM Departamento") 
             Departamento = cursor.fetchall()
             return jsonify(Departamento)
         except Exception as e:
