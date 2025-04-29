@@ -385,7 +385,6 @@ def subir_encuesta():
         df = pd.read_excel(file, engine='openpyxl')
         data_json = df.to_dict(orient='records')
 
-        # Obtener la conexión a la base de datos
         conexion = obtener_conexion()
         if conexion is None:
             return jsonify({'error': 'No se pudo conectar a la base de datos'}), 500
@@ -400,12 +399,10 @@ def subir_encuesta():
             clase_nombre = row['Clase']
             respuestas = {k: v for k, v in row.items() if k not in ['Matricula', 'Grupo', 'Comentarios', 'Profesor', 'Clase']}
 
-            # 1. Insertar o verificar Alumno
             cursor.execute("SELECT matricula FROM Alumno WHERE matricula = %s", (matricula,))
             if not cursor.fetchone():
                 cursor.execute("INSERT INTO Alumno (matricula, nombre, apellidoPaterno, apellidoMaterno) VALUES (%s, %s, %s, %s)", (matricula, 'Pendiente', 'Pendiente', 'Pendiente'))
 
-            # 2. Verificar o crear Materia
             cursor.execute("SELECT clave FROM Materia WHERE nombre = %s", (clase_nombre,))
             materia = cursor.fetchone()
             if materia:
@@ -416,7 +413,6 @@ def subir_encuesta():
                 cursor.execute("SELECT clave FROM Materia WHERE nombre = %s", (clase_nombre,))
                 clave_materia = cursor.fetchone()[0]
 
-            # 3. Verificar o crear Grupo
             cursor.execute("SELECT CRN FROM Grupo WHERE grupo = %s AND clave = %s", (grupo_nombre, clave_materia))
             grupo = cursor.fetchone()
             if grupo:
@@ -427,7 +423,6 @@ def subir_encuesta():
                 cursor.execute("SELECT CRN FROM Grupo WHERE grupo = %s AND clave = %s", (grupo_nombre, clave_materia))
                 crn = cursor.fetchone()[0]
 
-            # 4. Verificar o crear Profesor
             apellido_paterno, nombre_profesor = profesor_nombre.split(",")
             apellido_paterno = apellido_paterno.strip()
             nombre_profesor = nombre_profesor.strip()
@@ -443,12 +438,10 @@ def subir_encuesta():
                 conexion.commit()
                 matricula_profesor = nueva_matricula_profesor
 
-            # 5. Relacionar Profesor con Grupo
             cursor.execute("SELECT * FROM ProfesorGrupo WHERE CRN = %s AND matricula = %s", (crn, matricula_profesor))
             if not cursor.fetchone():
                 cursor.execute("INSERT INTO ProfesorGrupo (CRN, matricula) VALUES (%s, %s)", (crn, matricula_profesor))
 
-            # 6. Insertar Comentario
             if comentario and not pd.isna(comentario):
                 cursor.execute("""
                     IF NOT EXISTS (SELECT * FROM Comenta WHERE idPregunta = 1 AND matricula = %s AND CRN = %s)
@@ -458,7 +451,6 @@ def subir_encuesta():
                     END
                 """, (matricula, crn, matricula, crn, comentario))
 
-            # 7. Insertar Respuestas
             for idx, (pregunta, valor) in enumerate(respuestas.items(), start=1):
                 if not pd.isna(valor):
                     cursor.execute("""
